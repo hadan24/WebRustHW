@@ -1,8 +1,10 @@
-use std::io::{Error, ErrorKind};
-use std::str::FromStr;
+use std::{
+    io::{Error, ErrorKind},
+    str::FromStr,
+};
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq, Hash, Clone)]
 pub struct QuestionId(String);
 impl FromStr for QuestionId {
     type Err = std::io::Error;
@@ -17,9 +19,9 @@ impl FromStr for QuestionId {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Hash, Clone)]
 pub struct Question {
-    id: QuestionId,
+    pub id: QuestionId,
     title: String,
     content: String,
     tags: Option<Vec<String>>,

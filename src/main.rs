@@ -1,5 +1,9 @@
 mod question;
 use question::*;
+
+mod model;
+use model::*;
+
 use std::str::FromStr;
 use axum::{
     http::StatusCode,
@@ -14,7 +18,7 @@ async fn question() -> Response {
         QuestionId::from_str("1").expect("No id provided"),
         "First Question".to_string(),
         "Content of question".to_string(),
-        Some(vec!("faq".to_string())),
+        Some(vec!["faq".to_string()]),
     );
     println!("{:?}", question);
 
@@ -27,9 +31,11 @@ async fn handler_404() -> Response {
 
 #[tokio::main]
 async fn main() {
-    let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
     let app = Router::new()
-        .route("/", get(|| async {"Hallo :D 🦀"}))
+        .route("/", get(|| async { "Hallo :D 🦀" }))
         .route("/question", get(question))
         .fallback(handler_404);
 
