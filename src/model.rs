@@ -1,26 +1,20 @@
 use crate::question::*;
-use std::{
-    collections::HashMap,
-    str::FromStr
-};
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
-struct Database {
-    questions: HashMap<QuestionId, Question>
+pub type QuestionDB = HashMap<QuestionId, Question>;
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Database {
+    pub questions: QuestionDB
 }
 
 impl Database {
-    fn new() -> Self {
-        Database {questions: HashMap::new()}
+    pub fn new() -> Self {
+        Database {questions: Self::init()}
     }
-
-    fn init(self) -> Self {
-        let q = Question::new(
-            QuestionId::from_str("1").expect("No id provided"),
-            "First Question".to_string(),
-            "Content of question".to_string(),
-            Some(vec!["faq".to_string()]),
-        );
-        self.add_question(q)
+    fn init() -> QuestionDB {
+        let file = include_str!("../questions.json");
+        serde_json::from_str(file).expect("Couldn't read questions.json :(")
     }
 
     fn add_question(mut self, q: Question) -> Self {

@@ -2,9 +2,9 @@ use std::{
     io::{Error, ErrorKind},
     str::FromStr,
 };
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Serialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub struct QuestionId(String);
 impl FromStr for QuestionId {
     type Err = std::io::Error;
@@ -19,7 +19,7 @@ impl FromStr for QuestionId {
     }
 }
 
-#[derive(Debug, Serialize, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 pub struct Question {
     pub id: QuestionId,
     title: String,
