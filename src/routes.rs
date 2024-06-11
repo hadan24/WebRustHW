@@ -2,18 +2,43 @@ use crate::question::*;
 use crate::model::*;
 use std::sync::Arc;
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json
 };
+use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationParams {
+    start: Option<usize>,
+    end: Option<usize>
+}
 pub async fn questions (
-    State(db): State<Arc<Database>>
+    State(db): State<Arc<Database>>,
+    Query(args): Query<PaginationParams>
 ) -> Response {
     let data: Vec<Question> = db.questions.values().cloned().collect();
 
-    (StatusCode::OK, Json(&*data)).into_response()
+    match args {
+        PaginationParams { start: None, end: Some(_) } |
+        PaginationParams { start: Some(_), end: None } =>
+            (StatusCode::BAD_REQUEST, "400 Bad Request >:(").into_response(),
+
+        PaginationParams { start: Some(x), end: Some(y) } => {
+            let y = y + 1;  // to make the end index match the user's expectations
+            if x > y || x > data.len() {
+                (StatusCode::BAD_REQUEST, "400 Bad Request >:(").into_response()
+            } else if y+1 > data.len() {
+                (StatusCode::OK, Json(&data[x..])).into_response()
+            } else {
+                (StatusCode::OK, Json(&data[x..y])).into_response()
+            }
+        },
+        PaginationParams { start: None, end: None } => {
+            (StatusCode::OK, Json(data)).into_response()
+        }
+    }
 }
 
 pub async fn handler_404() -> Response {
