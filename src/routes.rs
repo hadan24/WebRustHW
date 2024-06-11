@@ -1,6 +1,7 @@
 use crate::question::*;
 use crate::model::*;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -15,10 +16,11 @@ pub struct PaginationParams {
     end: Option<usize>
 }
 pub async fn questions (
-    State(db): State<Arc<Database>>,
+    State(db): State<Arc<RwLock<Database>>>,
     Query(args): Query<PaginationParams>
 ) -> Response {
-    let mut data: Vec<Question> = db.questions.values().cloned().collect();
+    let mut data: Vec<Question> = db.read().await.questions
+        .values().cloned().collect();
     data.sort_by(|a, b| a.id.cmp(&b.id));
 
     match args {
@@ -45,12 +47,10 @@ pub async fn questions (
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QuestionId { id: String }
 pub async fn get_question(
-    State(db): State<Arc<Database>>,
+    State(db): State<Arc<RwLock<Database>>>,
     Query(qid): Query<QuestionId>
 ) -> Response {
-    let q = db.questions.get(&qid.id);
-
-    match q {
+    match db.read().await.questions.get(&qid.id) {
         Some(q) => (StatusCode::OK, Json(q)).into_response(),
         None => (StatusCode::NOT_FOUND, "404 Not Found :(").into_response()
     }
