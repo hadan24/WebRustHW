@@ -18,7 +18,8 @@ pub async fn questions (
     State(db): State<Arc<Database>>,
     Query(args): Query<PaginationParams>
 ) -> Response {
-    let data: Vec<Question> = db.questions.values().cloned().collect();
+    let mut data: Vec<Question> = db.questions.values().cloned().collect();
+    data.sort_by(|a, b| a.id.cmp(&b.id));
 
     match args {
         PaginationParams { start: None, end: Some(_) } |
@@ -26,7 +27,7 @@ pub async fn questions (
             (StatusCode::BAD_REQUEST, "400 Bad Request >:(").into_response(),
 
         PaginationParams { start: Some(x), end: Some(y) } => {
-            let y = y + 1;  // to make the end index match the user's expectations
+            let y = y + 1;  // make the end index match the user's expectations
             if x > y || x > data.len() {
                 (StatusCode::BAD_REQUEST, "400 Bad Request >:(").into_response()
             } else if y+1 > data.len() {
@@ -38,6 +39,20 @@ pub async fn questions (
         PaginationParams { start: None, end: None } => {
             (StatusCode::OK, Json(data)).into_response()
         }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QuestionId { id: String }
+pub async fn get_question(
+    State(db): State<Arc<Database>>,
+    Query(qid): Query<QuestionId>
+) -> Response {
+    let q = db.questions.get(&qid.id);
+
+    match q {
+        Some(q) => (StatusCode::OK, Json(q)).into_response(),
+        None => (StatusCode::NOT_FOUND, "404 Not Found :(").into_response()
     }
 }
 

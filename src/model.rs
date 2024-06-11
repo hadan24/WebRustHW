@@ -2,7 +2,7 @@ use crate::question::*;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-pub type QuestionDB = HashMap<QuestionId, Question>;
+pub type QuestionDB = HashMap<String, Question>;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Database {
     pub questions: QuestionDB
