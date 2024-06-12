@@ -8,7 +8,7 @@ use tokio::{
     sync::RwLock
 };
 use axum::{
-    routing::get,
+    routing::{get, post},
     Router
 };
 
@@ -23,7 +23,8 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "Hallo :D 🦀" }))
         .route("/questions", get(routes::questions))
-        .route("/get_question", get(routes::get_question))
+        .route("/questions/:id", get(routes::get_question))
+        .route("/add_question", post(routes::post_question))
         .fallback(routes::handler_404)
         .with_state(db);
 
