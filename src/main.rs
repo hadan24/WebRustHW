@@ -24,7 +24,7 @@ async fn main() {
         .route("/", get(|| async { "Hallo :D 🦀" }))
         .route("/questions", get(routes::questions))
         .route("/questions/:id", get(routes::get_question))
-        .route("/add_question", post(routes::post_question))
+        .route("/questions/add", post(routes::post_question))
         .fallback(routes::handler_404)
         .with_state(db);
 

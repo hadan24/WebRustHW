@@ -1,7 +1,6 @@
 use crate::question::*;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use serde_json;
 
 pub type QuestionDB = HashMap<String, Question>;
 #[derive(Clone, Serialize, Deserialize)]
@@ -42,4 +41,5 @@ impl Database {
         self.questions.insert(qid, q);
         Ok(())
     }
+
 }
