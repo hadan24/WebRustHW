@@ -8,7 +8,7 @@ use tokio::{
     sync::RwLock
 };
 use axum::{
-    routing::{get, post, put},
+    routing::{get, post, put, delete},
     Router
 };
 
@@ -26,6 +26,7 @@ async fn main() {
         .route("/questions/:id", get(routes::get_question))
         .route("/questions/add", post(routes::post_question))
         .route("/questions/update/:id", put(routes::update_question))
+        .route("/questions/delete/:id", delete(routes::delete_question))
         .fallback(routes::handler_404)
         .with_state(db);
 

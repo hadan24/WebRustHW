@@ -30,7 +30,7 @@ impl Database {
     }
 
     pub fn get_question_by_id(&self, qid: &str) -> Option<&Question> {
-        self.questions.get(&qid.to_string())
+        self.questions.get(qid)
     }
 
     pub fn add_question(&mut self, q: Question) -> Result<(), DatabaseError> {
@@ -52,11 +52,22 @@ impl Database {
             return Err(DatabaseError::UnprocessableId(qid.to_string()));
         }
 
-        match self.questions.get_mut(&qid.to_string()) {
+        match self.questions.get_mut(qid) {
             Some(q) => {
                 *q = new_q;
                 Ok(())
             },
+            None => Err(DatabaseError::NotFound)
+        }
+    }
+
+    pub fn delete_question(&mut self, qid: &str) -> Result<(), DatabaseError> {
+        if qid.is_empty() {
+            return Err(DatabaseError::UnprocessableId(qid.to_string()));
+        }
+
+        match self.questions.remove(qid) {
+            Some(_) => Ok(()),
             None => Err(DatabaseError::NotFound)
         }
     }

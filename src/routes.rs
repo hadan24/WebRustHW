@@ -83,6 +83,25 @@ pub async fn update_question (
     }
 }
 
+pub async fn delete_question (
+    State(db): State<Arc<RwLock<Database>>>,
+    Path(qid): Path<String>
+) -> Response {
+    match db.write().await.delete_question(&qid) {
+        Ok(_) => (StatusCode::OK, "Question deleted.").into_response(),
+        Err(DatabaseError::NotFound) =>
+            (StatusCode::NOT_FOUND, format!("Couldn't find question with id: {:?}", qid))
+            .into_response(),
+        Err(DatabaseError::UnprocessableId(e_id)) =>
+            (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
+            .into_response(),
+        Err(_) =>
+            (StatusCode::BAD_REQUEST, "This should not be reached.")
+            .into_response()
+    }
+}
+
+
 pub async fn handler_404() -> Response {
     (StatusCode::NOT_FOUND, "404 Not Found :(").into_response()
 }
