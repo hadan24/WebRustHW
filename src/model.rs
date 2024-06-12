@@ -10,7 +10,9 @@ pub struct Database {
 
 #[derive(Debug)]
 pub enum DatabaseError {
-    DuplicateId(String)
+    DuplicateId(String),
+    NotFound,
+    UnprocessableId(String)
 }
 impl Database {
     pub fn new() -> Self {
@@ -27,19 +29,36 @@ impl Database {
         data
     }
 
-    pub fn get_question_by_id(&self, qid: String) -> Option<&Question> {
-        self.questions.get(&qid)
+    pub fn get_question_by_id(&self, qid: &str) -> Option<&Question> {
+        self.questions.get(&qid.to_string())
     }
 
     pub fn add_question(&mut self, q: Question) -> Result<(), DatabaseError> {
         let qid = q.id.clone();
 
-        if self.questions.get(&qid).is_some() {
-            return Err(DatabaseError::DuplicateId(q.id));
+        match self.questions.get(&qid) {
+            Some(_) => Err(DatabaseError::DuplicateId(q.id)),
+            None => {
+                self.questions.insert(qid, q);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn update_question(&mut self, qid: &str, new_q: Question)
+        -> Result<(), DatabaseError>
+    {
+        if qid.is_empty() {
+            return Err(DatabaseError::UnprocessableId(qid.to_string()));
         }
 
-        self.questions.insert(qid, q);
-        Ok(())
+        match self.questions.get_mut(&qid.to_string()) {
+            Some(q) => {
+                *q = new_q;
+                Ok(())
+            },
+            None => Err(DatabaseError::NotFound)
+        }
     }
 
 }
