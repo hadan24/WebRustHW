@@ -1,11 +1,15 @@
 use crate::question::*;
+use crate::answer::*;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 pub type QuestionDB = HashMap<String, Question>;
+pub type AnswerDB = HashMap<String, Answer>;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Database {
-    pub questions: QuestionDB
+    pub questions: QuestionDB,
+    pub answers: AnswerDB
 }
 
 #[derive(Debug)]
@@ -16,11 +20,13 @@ pub enum DatabaseError {
 }
 impl Database {
     pub fn new() -> Self {
-        Database {questions: Self::init()}
-    }
-    fn init() -> QuestionDB {
         let file = include_str!("../questions.json");
-        serde_json::from_str(file).expect("Couldn't read questions.json :(")
+
+        Database {
+            questions: serde_json::from_str(file)
+                .expect("Couldn't read questions.json :("),
+            answers: HashMap::new()
+        }
     }
 
     pub fn get_sorted_data(&self) -> Vec<Question> {
@@ -69,6 +75,22 @@ impl Database {
         match self.questions.remove(qid) {
             Some(_) => Ok(()),
             None => Err(DatabaseError::NotFound)
+        }
+    }
+
+    pub fn add_answer(&mut self, a: Answer) -> Result<(), DatabaseError> {
+        let a_id = a.id.clone();
+
+        match self.answers.get(&a_id) {
+            Some(_) => Err(DatabaseError::DuplicateId(a_id)),
+            None => {
+                if self.questions.contains_key(&a.question_id) {
+                    self.answers.insert(a_id, a);
+                    Ok(())
+                } else {
+                    Err(DatabaseError::NotFound)
+                }
+            }
         }
     }
 

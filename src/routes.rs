@@ -1,4 +1,5 @@
 use crate::question::*;
+use crate::answer::*;
 use crate::model::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -9,8 +10,9 @@ use axum::{
     Json
 };
 use serde::{Serialize, Deserialize};
+use nanoid::nanoid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PaginationParams {
     start: Option<usize>,
     end: Option<usize>
@@ -59,7 +61,7 @@ pub async fn post_question (
     match db.write().await.add_question(q) {
         Ok(_) => (StatusCode::CREATED, "Question posted!").into_response(),
         Err(e) =>
-            (StatusCode::BAD_REQUEST, format!("Question already exists: {:?}", e))
+            (StatusCode::BAD_REQUEST, format!("Question id already exists: {:?}", e))
             .into_response()
     }
 }
@@ -77,9 +79,8 @@ pub async fn update_question (
         Err(DatabaseError::UnprocessableId(e_id)) =>
             (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
             .into_response(),
-        Err(e) =>
-            (StatusCode::BAD_REQUEST, "Otherwise faulty request")
-            .into_response()
+        Err(_e) =>
+            (StatusCode::BAD_REQUEST, "Otherwise faulty request").into_response()
     }
 }
 
@@ -97,6 +98,21 @@ pub async fn delete_question (
             .into_response(),
         Err(_) =>
             (StatusCode::BAD_REQUEST, "This should not be reached.")
+            .into_response()
+    }
+}
+
+pub async fn post_answer (
+    State(db): State<Arc<RwLock<Database>>>,
+    Path(qid): Path<String>,
+    Query(ans_content): Query<String>
+) -> Response {
+    let a = Answer::new(nanoid!(), ans_content, qid);
+    
+    match db.write().await.add_answer(a) {
+        Ok(_) => (StatusCode::OK, "Answer posted!").into_response(),
+        Err(e) =>
+            (StatusCode::BAD_REQUEST, format!("Duplicate answer id: {:?}", e))
             .into_response()
     }
 }

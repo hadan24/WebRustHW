@@ -7,11 +7,3 @@ pub struct Question {
     content: String,
     tags: Option<Vec<String>>,
 }
-impl Question {
-    pub fn new (
-        id: String, title: String,
-        content: String, tags: Option<Vec<String>>
-    ) -> Self {
-        Question {id, title, content, tags}
-    }
-}

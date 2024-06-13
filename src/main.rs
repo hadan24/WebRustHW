@@ -1,4 +1,5 @@
 mod question;
+mod answer;
 mod model;
 mod routes;
 
@@ -27,6 +28,7 @@ async fn main() {
         .route("/questions/add", post(routes::post_question))
         .route("/questions/update/:id", put(routes::update_question))
         .route("/questions/delete/:id", delete(routes::delete_question))
+        .route("/questions/:id/answers", post(routes::post_answer))
         .fallback(routes::handler_404)
         .with_state(db);
 
