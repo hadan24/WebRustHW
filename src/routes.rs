@@ -9,12 +9,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json
 };
-use serde::{Serialize, Deserialize};
+use serde::Deserialize;
 use nanoid::nanoid;
 
 /// Pagination query parameters, includes the `start`
 /// and `end` indices of sorted questions to display
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct PaginationParams {
     start: Option<usize>,
     end: Option<usize>
@@ -85,7 +85,7 @@ pub async fn post_question (
     match db.write().await.add_question(q) {
         Ok(_) => (StatusCode::CREATED, "Question posted!").into_response(),
         Err(e) =>
-            (StatusCode::BAD_REQUEST, format!("Question id already exists: {:?}", e))
+            (StatusCode::CONFLICT, format!("Question id already exists: {:?}", e))
             .into_response()
     }
 }
@@ -109,7 +109,7 @@ pub async fn update_question (
             (StatusCode::BAD_REQUEST, format!("Provided ids don't match: {:?}, {:?}", e1, e2))
             .into_response(),
         Err(_e) =>
-            (StatusCode::BAD_REQUEST, "Otherwise faulty request").into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Otherwise faulty request").into_response()
     }
 }
 
@@ -127,7 +127,7 @@ pub async fn delete_question (
             (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
             .into_response(),
         Err(_) =>
-            (StatusCode::BAD_REQUEST, "This should not be reached.")
+            (StatusCode::INTERNAL_SERVER_ERROR, "This should not be reached.")
             .into_response()
     }
 }
@@ -145,7 +145,7 @@ pub async fn post_answer (
     match db.write().await.add_answer(a) {
         Ok(_) => (StatusCode::OK, "Answer posted!").into_response(),
         Err(e) =>
-            (StatusCode::BAD_REQUEST, format!("Duplicate answer id: {:?}", e))
+            (StatusCode::CONFLICT, format!("Duplicate answer id: {:?}", e))
             .into_response()
     }
 }
