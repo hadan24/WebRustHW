@@ -1,5 +1,4 @@
-mod question;
-mod answer;
+mod types;
 mod model;
 mod routes;
 

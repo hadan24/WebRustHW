@@ -1,5 +1,7 @@
-use crate::question::*;
-use crate::answer::*;
+use crate::types::{
+    question::*,
+    answer::*
+};
 use crate::model::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;

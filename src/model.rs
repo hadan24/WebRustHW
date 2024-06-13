@@ -1,5 +1,7 @@
-use crate::question::*;
-use crate::answer::*;
+use crate::types::{
+    question::*,
+    answer::*
+};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
