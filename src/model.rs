@@ -3,20 +3,27 @@ use crate::answer::*;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
-pub type QuestionDB = HashMap<String, Question>;
-pub type AnswerDB = HashMap<String, Answer>;
+type QuestionDB = HashMap<String, Question>;
+type AnswerDB = HashMap<String, Answer>;
 
+/// The database of questions and answers.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Database {
     pub questions: QuestionDB,
     pub answers: AnswerDB
 }
 
+/// Potential errors while performing database operations.
 #[derive(Debug)]
 pub enum DatabaseError {
+    /// Duplicate question or answer id
     DuplicateId(String),
+    /// Resource (usually a question) not found
     NotFound,
-    UnprocessableId(String)
+    /// Generally unprocessable data/id
+    UnprocessableData(String),
+    /// For updating data, ids don't match
+    MismatchedIds(String, String)
 }
 impl Database {
     pub fn new() -> Self {
@@ -55,7 +62,10 @@ impl Database {
         -> Result<(), DatabaseError>
     {
         if qid.is_empty() {
-            return Err(DatabaseError::UnprocessableId(qid.to_string()));
+            return Err(DatabaseError::UnprocessableData(qid.to_string()));
+        }
+        if qid != new_q.id {
+            return Err(DatabaseError::MismatchedIds(qid.to_string(), new_q.id));
         }
 
         match self.questions.get_mut(qid) {
@@ -69,7 +79,7 @@ impl Database {
 
     pub fn delete_question(&mut self, qid: &str) -> Result<(), DatabaseError> {
         if qid.is_empty() {
-            return Err(DatabaseError::UnprocessableId(qid.to_string()));
+            return Err(DatabaseError::UnprocessableData(qid.to_string()));
         }
 
         match self.questions.remove(qid) {

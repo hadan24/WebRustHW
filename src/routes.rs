@@ -12,11 +12,18 @@ use axum::{
 use serde::{Serialize, Deserialize};
 use nanoid::nanoid;
 
+/// Pagination query parameters, includes the `start`
+/// and `end` indices of sorted questions to display
 #[derive(Serialize, Deserialize)]
 pub struct PaginationParams {
     start: Option<usize>,
     end: Option<usize>
 }
+/// Displays all questions or a subset of questions sorted by id.
+/// If no pagination query was provided, display everything.
+/// # Example queries:
+/// `/questions?start=0&end=10`
+/// `/questions?start=10    // Displays ALL questions at and after index 10`
 pub async fn questions (
     State(db): State<Arc<RwLock<Database>>>,
     Query(args): Query<PaginationParams>
@@ -24,26 +31,42 @@ pub async fn questions (
     let sorted_data = db.read().await.get_sorted_data();
 
     match args {
-        PaginationParams { start: None, end: Some(_) } |
-        PaginationParams { start: Some(_), end: None } =>
-            (StatusCode::BAD_REQUEST, Json("400 Bad Request >:(")).into_response(),
+        PaginationParams { start: None, end: Some(_) } => {
+            (StatusCode::BAD_REQUEST, Json("400 Bad Request. No starting index"))
+                .into_response()
+        },
+
+        PaginationParams { start: Some(x), end: None } => {
+            if x > sorted_data.len() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(format!("400 Bad Request. No entries past index {:?}", x))
+                ).into_response();
+            }
+            (StatusCode::OK, Json(&sorted_data[x..])).into_response()
+        },
 
         PaginationParams { start: Some(x), end: Some(y) } => {
             let y = y + 1;  // make the end index match the user's expectations
             if x > y || x > sorted_data.len() {
-                (StatusCode::BAD_REQUEST, Json("400 Bad Request >:(")).into_response()
-            } else if y+1 > sorted_data.len() {
+                (StatusCode::BAD_REQUEST, Json("400 Bad Request. Check indices."))
+                    .into_response()
+            } else if y > sorted_data.len() {
                 (StatusCode::OK, Json(&sorted_data[x..])).into_response()
             } else {
                 (StatusCode::OK, Json(&sorted_data[x..y])).into_response()
             }
         },
+
         PaginationParams { start: None, end: None } => {
             (StatusCode::OK, Json(sorted_data)).into_response()
         }
     }
 }
 
+/// Displays a question based on the id given in the path.
+/// # Example request:
+/// `/questions/help`
 pub async fn get_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>
@@ -54,6 +77,7 @@ pub async fn get_question (
     }
 }
 
+/// Posts a new question in JSON form to the database.
 pub async fn post_question (
     State(db): State<Arc<RwLock<Database>>>,
     Json(q): Json<Question>
@@ -66,6 +90,8 @@ pub async fn post_question (
     }
 }
 
+/// Updates an existing question. The question id should be included in
+/// the path, and the updated content should come in JSON format.
 pub async fn update_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>,
@@ -76,14 +102,18 @@ pub async fn update_question (
         Err(DatabaseError::NotFound) =>
             (StatusCode::NOT_FOUND, "Couldn't find question")
             .into_response(),
-        Err(DatabaseError::UnprocessableId(e_id)) =>
+        Err(DatabaseError::UnprocessableData(e_id)) =>
             (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
+            .into_response(),
+        Err(DatabaseError::MismatchedIds(e1, e2)) =>
+            (StatusCode::BAD_REQUEST, format!("Provided ids don't match: {:?}, {:?}", e1, e2))
             .into_response(),
         Err(_e) =>
             (StatusCode::BAD_REQUEST, "Otherwise faulty request").into_response()
     }
 }
 
+/// Deletes a question based on the id given in the path.
 pub async fn delete_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>
@@ -93,7 +123,7 @@ pub async fn delete_question (
         Err(DatabaseError::NotFound) =>
             (StatusCode::NOT_FOUND, format!("Couldn't find question with id: {:?}", qid))
             .into_response(),
-        Err(DatabaseError::UnprocessableId(e_id)) =>
+        Err(DatabaseError::UnprocessableData(e_id)) =>
             (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
             .into_response(),
         Err(_) =>
@@ -102,13 +132,16 @@ pub async fn delete_question (
     }
 }
 
+/// Posts an answer to a particular question.
+/// The question's id shold be included in the path, and
+/// the answer's content should be included in a query.
 pub async fn post_answer (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>,
-    Query(ans_content): Query<String>
+    Query(answer): Query<String>
 ) -> Response {
-    let a = Answer::new(nanoid!(), ans_content, qid);
-    
+    let a = Answer::new(nanoid!(), answer, qid);
+
     match db.write().await.add_answer(a) {
         Ok(_) => (StatusCode::OK, "Answer posted!").into_response(),
         Err(e) =>
@@ -117,7 +150,7 @@ pub async fn post_answer (
     }
 }
 
-
+// Handles any requests that do not match the others.
 pub async fn handler_404() -> Response {
     (StatusCode::NOT_FOUND, "404 Not Found :(").into_response()
 }
