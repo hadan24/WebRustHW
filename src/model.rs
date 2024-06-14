@@ -2,107 +2,169 @@ use crate::types::{
     question::*,
     answer::*
 };
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-
-type QuestionDB = HashMap<String, Question>;
-type AnswerDB = HashMap<String, Answer>;
+use sqlx::{
+    Error as sqlxError,
+    postgres::{
+        PgPool, PgPoolOptions, PgRow
+    },
+    Row
+};
 
 /// The database of questions and answers.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Database {
-    pub questions: QuestionDB,
-    pub answers: AnswerDB
+    pub connection: PgPool
 }
 
 /// Potential errors while performing database operations.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
     /// Duplicate question or answer id
+    #[error("Id already exists: {0}")]
     DuplicateId(String),
+
     /// Resource (usually a question) not found
+    #[error("Resource not found")]
     NotFound,
+
     /// Generally unprocessable data/id
+    #[error("Could not process data {0}")]
     UnprocessableData(String),
+
     /// For updating data, ids don't match
-    MismatchedIds(String, String)
+    #[error("Given ids don't match when they should: {0}, {1}")]
+    MismatchedIds(String, String),
+
+    /// Database couldn't be queried
+    #[error("Database query error: {0}")]
+    QueryError(String)
 }
+impl From<sqlxError> for DatabaseError {
+    fn from(e: sqlxError) -> Self {
+        DatabaseError::QueryError(e.to_string())
+    }
+}
+
+
 impl Database {
-    pub fn new() -> Self {
-        let file = include_str!("../questions.json");
+    pub async fn new() -> Self {
+        use std::env::var;
 
-        Database {
-            questions: serde_json::from_str(file)
-                .expect("Couldn't read questions.json :("),
-            answers: HashMap::new()
+        let pw_file = var("PG_PASSWORDFILE")
+            .expect("Error getting pw file env var");
+        let pw = std::fs::read_to_string(pw_file)
+            .expect("Couldn't read in pw");
+        let db_url = format!(
+            "postgres://{}:{}@{}:5432/{}",
+            var("PG_USER").expect("Couldn't get PG_USER var"),
+            pw.trim(),
+            var("PG_HOST").expect("Couldn't get PG_HOST var"),
+            var("PG_DBNAME").expect("Couldn't get db name var")
+        );
+
+        let pool = match PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url).await
+        {
+            Ok(p) => p,
+            Err(e) => panic!("Couldn't establish DB connection to {}! {}", db_url, e)
+        };
+
+        Database { connection: pool }
+    }
+
+    fn to_question(&self, r: &PgRow) -> Question {
+        Question::new(
+            r.get("id"), 
+            r.get("title"), 
+            r.get("content"), 
+            r.get("tags")
+        )
+    }
+
+    pub async fn get_questions(&self, limit: Option<i32>, offset: i32)
+        -> Result<Vec<Question>, DatabaseError>
+    {
+        let qs = sqlx::query("SELECT * FROM questions LIMIT $1 OFFSET $2")
+            .bind(limit)
+            .bind(offset)
+            .map(|row: PgRow| self.to_question(&row))
+            .fetch_all(&self.connection)
+            .await?;
+
+        Ok(qs)
+    }
+
+    pub async fn get_question_by_id(&self, qid: String) -> Result<Question, DatabaseError> {
+        let row = sqlx::query("SELECT * FROM questions WHERE id = $1")
+            .bind(qid)
+            .fetch_one(&self.connection)
+            .await?;
+
+        Ok(self.to_question(&row))
+    }
+
+    pub async fn add_question(&mut self, q: Question) -> Result<(), DatabaseError> {
+        match sqlx::query("
+                INSERT INTO questions (id, title, content, tags)
+                VALUES ($1, $2, $3, $4)
+            ")
+            .bind(q.id.clone())
+            .bind(q.title())
+            .bind(q.content())
+            .bind(q.tags())
+            .execute(&self.connection)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(DatabaseError::QueryError(e.to_string()))
         }
     }
 
-    pub fn get_sorted_data(&self) -> Vec<Question> {
-        let mut data: Vec<Question> = self.questions.values().cloned().collect();
-        data.sort_by(|a, b| a.id.cmp(&b.id));
-        data
-    }
-
-    pub fn get_question_by_id(&self, qid: &str) -> Option<&Question> {
-        self.questions.get(qid)
-    }
-
-    pub fn add_question(&mut self, q: Question) -> Result<(), DatabaseError> {
-        let qid = q.id.clone();
-
-        match self.questions.get(&qid) {
-            Some(_) => Err(DatabaseError::DuplicateId(q.id)),
-            None => {
-                self.questions.insert(qid, q);
-                Ok(())
-            }
-        }
-    }
-
-    pub fn update_question(&mut self, qid: &str, new_q: Question)
+    pub async fn update_question(&mut self, qid: &str, new_q: QuestionUpdate)
         -> Result<(), DatabaseError>
     {
-        if qid.is_empty() {
-            return Err(DatabaseError::UnprocessableData(qid.to_string()));
-        }
-        if qid != new_q.id {
-            return Err(DatabaseError::MismatchedIds(qid.to_string(), new_q.id));
-        }
-
-        match self.questions.get_mut(qid) {
-            Some(q) => {
-                *q = new_q;
-                Ok(())
-            },
-            None => Err(DatabaseError::NotFound)
-        }
-    }
-
-    pub fn delete_question(&mut self, qid: &str) -> Result<(), DatabaseError> {
-        if qid.is_empty() {
-            return Err(DatabaseError::UnprocessableData(qid.to_string()));
-        }
-
-        match self.questions.remove(qid) {
-            Some(_) => Ok(()),
-            None => Err(DatabaseError::NotFound)
+        match sqlx::query("
+                UPDATE questions
+                SET title = $1, content = $2, tags = $3
+                WHERE id = $4
+            ")
+            .bind(new_q.title)
+            .bind(new_q.content)
+            .bind(new_q.tags)
+            .bind(qid)
+            .execute(&self.connection)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(DatabaseError::QueryError(e.to_string()))
         }
     }
 
-    pub fn add_answer(&mut self, a: Answer) -> Result<(), DatabaseError> {
-        let a_id = a.id.clone();
+    pub async fn delete_question(&mut self, qid: &str) -> Result<(), DatabaseError> {
+        match sqlx::query("DELETE FROM questions WHERE id = $1")
+            .bind(qid)
+            .execute(&self.connection)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(DatabaseError::QueryError(e.to_string()))
+        }
+    }
 
-        match self.answers.get(&a_id) {
-            Some(_) => Err(DatabaseError::DuplicateId(a_id)),
-            None => {
-                if self.questions.contains_key(&a.question_id) {
-                    self.answers.insert(a_id, a);
-                    Ok(())
-                } else {
-                    Err(DatabaseError::NotFound)
-                }
-            }
+    pub async fn add_answer(&mut self, a: Answer) -> Result<(), DatabaseError> {
+        match sqlx::query("
+                INSERT INTO answers (id, content, orig_q)
+                VALUES ($1, $2, $3)
+            ")
+            .bind(a.id.clone())
+            .bind(a.content())
+            .bind(a.question_id.clone())
+            .execute(&self.connection)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(DatabaseError::QueryError(e.to_string()))
         }
     }
 

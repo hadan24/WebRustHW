@@ -11,4 +11,6 @@ impl Answer {
     pub fn new(id: String, content: String, qid: String) -> Self {
         Answer { id, content, question_id: qid }
     }
+
+    pub fn content(&self) -> &String { &self.content }
 }

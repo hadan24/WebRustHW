@@ -14,7 +14,7 @@ use axum::{
 
 #[tokio::main]
 async fn main() {
-    let db = model::Database::new();
+    let db = model::Database::new().await;
     let db = Arc::new(RwLock::new(db));
 
     let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:3000")

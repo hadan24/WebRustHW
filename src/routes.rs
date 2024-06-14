@@ -18,8 +18,10 @@ use nanoid::nanoid;
 /// and `end` indices of sorted questions to display
 #[derive(Deserialize)]
 pub struct PaginationParams {
-    start: Option<usize>,
-    end: Option<usize>
+    /// Index of last item in page
+    pub limit: Option<i32>,
+    /// Index of first item in page
+    pub offset: i32
 }
 /// Displays all questions or a subset of questions sorted by id.
 /// If no pagination query was provided, display everything.
@@ -30,39 +32,11 @@ pub async fn questions (
     State(db): State<Arc<RwLock<Database>>>,
     Query(args): Query<PaginationParams>
 ) -> Response {
-    let sorted_data = db.read().await.get_sorted_data();
-
-    match args {
-        PaginationParams { start: None, end: Some(_) } => {
-            (StatusCode::BAD_REQUEST, Json("400 Bad Request. No starting index"))
-                .into_response()
-        },
-
-        PaginationParams { start: Some(x), end: None } => {
-            if x > sorted_data.len() {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(format!("400 Bad Request. No entries past index {:?}", x))
-                ).into_response();
-            }
-            (StatusCode::OK, Json(&sorted_data[x..])).into_response()
-        },
-
-        PaginationParams { start: Some(x), end: Some(y) } => {
-            let y = y + 1;  // make the end index match the user's expectations
-            if x > y || x > sorted_data.len() {
-                (StatusCode::BAD_REQUEST, Json("400 Bad Request. Check indices."))
-                    .into_response()
-            } else if y > sorted_data.len() {
-                (StatusCode::OK, Json(&sorted_data[x..])).into_response()
-            } else {
-                (StatusCode::OK, Json(&sorted_data[x..y])).into_response()
-            }
-        },
-
-        PaginationParams { start: None, end: None } => {
-            (StatusCode::OK, Json(sorted_data)).into_response()
-        }
+    match db.read().await.get_questions(args.limit, args.offset).await {
+        Ok(qs) => (StatusCode::OK, Json(&qs)).into_response(),
+        Err(e) =>
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {:?}", e))
+            .into_response()
     }
 }
 
@@ -73,9 +47,9 @@ pub async fn get_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>
 ) -> Response {
-    match db.read().await.get_question_by_id(&qid) {
-        Some(q) => (StatusCode::OK, Json(q)).into_response(),
-        None => (StatusCode::NOT_FOUND, Json("404 Not Found :(")).into_response()
+    match db.read().await.get_question_by_id(qid).await {
+        Ok(q) => (StatusCode::OK, Json(q)).into_response(),
+        Err(_e) => (StatusCode::NOT_FOUND, Json("404 Not Found :(")).into_response()
     }
 }
 
@@ -84,7 +58,7 @@ pub async fn post_question (
     State(db): State<Arc<RwLock<Database>>>,
     Json(q): Json<Question>
 ) -> Response {
-    match db.write().await.add_question(q) {
+    match db.write().await.add_question(q).await {
         Ok(_) => (StatusCode::CREATED, "Question posted!").into_response(),
         Err(e) =>
             (StatusCode::CONFLICT, format!("Question id already exists: {:?}", e))
@@ -97,21 +71,13 @@ pub async fn post_question (
 pub async fn update_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>,
-    Json(q): Json<Question>
+    Json(q): Json<QuestionUpdate>
 ) -> Response {
-    match db.write().await.update_question(&qid, q) {
+    match db.write().await.update_question(&qid, q).await {
         Ok(_) => (StatusCode::OK, "Question updated!").into_response(),
-        Err(DatabaseError::NotFound) =>
-            (StatusCode::NOT_FOUND, "Couldn't find question")
-            .into_response(),
-        Err(DatabaseError::UnprocessableData(e_id)) =>
-            (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
-            .into_response(),
-        Err(DatabaseError::MismatchedIds(e1, e2)) =>
-            (StatusCode::BAD_REQUEST, format!("Provided ids don't match: {:?}, {:?}", e1, e2))
-            .into_response(),
-        Err(_e) =>
-            (StatusCode::INTERNAL_SERVER_ERROR, "Otherwise faulty request").into_response()
+        Err(e) =>
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Issue updating question: {:?}", e))
+            .into_response()
     }
 }
 
@@ -120,16 +86,10 @@ pub async fn delete_question (
     State(db): State<Arc<RwLock<Database>>>,
     Path(qid): Path<String>
 ) -> Response {
-    match db.write().await.delete_question(&qid) {
+    match db.write().await.delete_question(&qid).await {
         Ok(_) => (StatusCode::OK, "Question deleted.").into_response(),
-        Err(DatabaseError::NotFound) =>
-            (StatusCode::NOT_FOUND, format!("Couldn't find question with id: {:?}", qid))
-            .into_response(),
-        Err(DatabaseError::UnprocessableData(e_id)) =>
-            (StatusCode::UNPROCESSABLE_ENTITY, format!("Couldn't process id: {:?}", e_id))
-            .into_response(),
-        Err(_) =>
-            (StatusCode::INTERNAL_SERVER_ERROR, "This should not be reached.")
+        Err(e) =>
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Issue deleting question: {:?}", e))
             .into_response()
     }
 }
@@ -144,10 +104,10 @@ pub async fn post_answer (
 ) -> Response {
     let a = Answer::new(nanoid!(), answer, qid);
 
-    match db.write().await.add_answer(a) {
+    match db.write().await.add_answer(a).await {
         Ok(_) => (StatusCode::OK, "Answer posted!").into_response(),
         Err(e) =>
-            (StatusCode::CONFLICT, format!("Duplicate answer id: {:?}", e))
+            (StatusCode::CONFLICT, format!("Issue posting answer: {:?}", e))
             .into_response()
     }
 }
